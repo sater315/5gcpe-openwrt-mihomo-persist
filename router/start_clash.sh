@@ -19,6 +19,7 @@ DNS_PORT=${DNS_PORT:-7874}
 LOCK_DIR=/tmp/codex_mihomo_start.lock
 STOPPING=/tmp/codex_mihomo_stopping
 VALIDATE_CONFIG=${VALIDATE_CONFIG:-1}
+TIME_SYNC_SCRIPT="$CLASH_DIR/time_sync.sh"
 
 mkdir -p "$LOG_DIR" "$RUN_DIR" "$CLASH_DIR/ui" 2>/dev/null
 
@@ -149,6 +150,11 @@ if [ -n "$first" ] && kill -0 "$first" 2>/dev/null; then
     say "found existing mihomo pid=$first"
     ensure_firewall
     exit 0
+fi
+
+if [ "${MIHOMO_SYNC_TIME:-1}" = "1" ] && [ -x "$TIME_SYNC_SCRIPT" ]; then
+    say "syncing time before start"
+    /bin/sh "$TIME_SYNC_SCRIPT" >> "$LOG" 2>&1 || true
 fi
 
 if [ "$VALIDATE_CONFIG" = "1" ]; then

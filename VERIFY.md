@@ -321,3 +321,119 @@ operator_policy_dns_watchdog 正常运行
 运营商策略路由和 DNS 可以在运行态关闭，并通过 /data 持久标记保持；
 也可以一键恢复到运营商 pref 60/80/100 策略和 211.138.* DNS。
 ```
+
+## VLESS REALITY + TUN 临时导入测试
+
+用户提供了一份 Xray/V2Ray JSON 格式的 VLESS Reality 节点配置，本仓库没有把该节点密钥写入 Git，仅在本地 `.cache/` 和路由器 `/tmp/` 中做临时转换和测试。
+
+转换为 Mihomo YAML 后的关键形态：
+
+```yaml
+proxies:
+  - name: REALITY
+    type: vless
+    network: tcp
+    tls: true
+    flow: xtls-rprx-vision
+    client-fingerprint: chrome
+    reality-opts:
+      public-key: <redacted>
+      short-id: <redacted>
+```
+
+### 首次失败原因
+
+最初普通代理和 TUN 测试中，节点测速失败，Mihomo 日志出现：
+
+```text
+REALITY Authentication: false
+connect error: REALITY authentication failed
+```
+
+排查发现路由器系统 epoch 比本机/真实 UTC 快 28800 秒：
+
+```text
+路由器 date -u: 2026-07-11 20:17 UTC
+本机 UTC:        2026-07-11 12:17 UTC
+偏差:            +8 小时
+```
+
+REALITY 对时间敏感，系统时钟偏差会导致认证失败。执行：
+
+```sh
+date -u -s '@<correct_epoch>'
+```
+
+校准后，同一个节点普通 mixed-port 测试通过：
+
+```text
+controller delay:
+http://www.gstatic.com/generate_204      {"delay":579}
+https://www.gstatic.com/generate_204     {"delay":834}
+http://cp.cloudflare.com/generate_204    {"delay":573}
+https://www.cloudflare.com/cdn-cgi/trace {"delay":837}
+
+本机 curl:
+HTTP proxy  192.168.8.1:7890 -> https://www.gstatic.com/generate_204 204
+HTTP proxy  192.168.8.1:7890 -> https://www.cloudflare.com/cdn-cgi/trace 200
+SOCKS5H     192.168.8.1:7890 -> https://www.gstatic.com/generate_204 204
+```
+
+### TUN 1-2 分钟自动回滚测试
+
+校准时间后，将该 REALITY 节点导入临时 TUN 配置，测试窗口约 90 秒，测试结束自动回滚到普通模式。
+
+TUN 启动证据：
+
+```text
+TUN_READY n=0
+tun_link=48: mihomo: <POINTOPOINT,MULTICAST,NOARP,UP,LOWER_UP> mtu 9000
+ports=:::7890 :::7874 :::9090
+rules=9000/9001/9002/9010 -> table 2022
+```
+
+路由器侧 8 轮检测：
+
+```text
+router_wan_ping=OK round=1..8
+router_dnsmasq_dns=OK round=1..8
+controller=OK round=1..8
+proxy_delay rc=0 https://www.gstatic.com/generate_204      delay=808-1247ms
+proxy_delay rc=0 https://www.cloudflare.com/cdn-cgi/trace delay=814-1269ms
+```
+
+本机侧连续监控：
+
+```text
+router=True
+wan=True
+dnsViaRouter=True
+controller=True
+```
+
+回滚后状态：
+
+```text
+post_ports=:::7890 :::9090
+post_tun=
+post_rules=
+post_rollback_wan=OK
+
+/data/clash/config.yaml:
+dns.enable: false
+tun.enable: false
+rules: MATCH,DIRECT
+
+/tmp/resolv.conf:
+nameserver 223.5.5.5
+nameserver 119.29.29.29
+nameserver 1.1.1.1
+```
+
+结论：
+
+```text
+该设备支持 Mihomo core 的 VLESS REALITY + TUN 临时运行。
+此前失败不是 TUN 路由问题，而是系统 UTC 时间偏差导致 REALITY 认证失败。
+仓库已加入 router/time_sync.sh，并由 start_clash.sh 在冷启动前自动调用。
+```

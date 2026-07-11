@@ -341,7 +341,7 @@ def upload_ruleset_files(client) -> None:
 def upload_router_files(client, mihomo_bin: Path, config_path: Path, overwrite_config: bool = False) -> None:
     run(client, f"mkdir -p {REMOTE_DIR}/logs {REMOTE_DIR}/run {REMOTE_DIR}/ui {REMOTE_DIR}/ruleset", timeout=30)
     info("uploading router scripts")
-    for name in ["start_clash.sh", "stop_clash.sh", "watchdog_clash.sh", "operator_policy_dns.sh", "operator_policy_dns_watchdog.sh"]:
+    for name in ["start_clash.sh", "stop_clash.sh", "watchdog_clash.sh", "time_sync.sh", "operator_policy_dns.sh", "operator_policy_dns_watchdog.sh"]:
         remote_upload_file(client, ROUTER / name, f"{REMOTE_DIR}/{name}", 0o755)
     remote_upload_file(client, ROUTER / "service_persist.sh", "/data/service_persist.sh", 0o755)
 
@@ -498,6 +498,8 @@ def status(args, existing_client=None, check: bool = True) -> None:
     try:
         cmd = r'''echo '--- system ---'
 uname -a 2>/dev/null || true
+echo "date_utc=$(date -u 2>/dev/null || date 2>/dev/null || true)"
+echo "epoch=$(date +%s 2>/dev/null || true)"
 cat /etc/openwrt_release 2>/dev/null | sed -n '1,12p' || true
 echo '--- files ---'
 ls -ld /data /data/clash /data/clash/logs /data/clash/run 2>/dev/null || true
@@ -522,6 +524,8 @@ echo '--- iptables ---'
 iptables -S CODEX_MIHOMO_INPUT 2>/dev/null || true
 echo '--- recent clash log ---'
 tail -n 40 /data/clash/logs/clash.log 2>/dev/null || true
+echo '--- recent time sync log ---'
+tail -n 30 /data/clash/logs/time_sync.log 2>/dev/null || true
 echo '--- recent watchdog log ---'
 tail -n 20 /data/clash/logs/watchdog.log 2>/dev/null || true
 '''

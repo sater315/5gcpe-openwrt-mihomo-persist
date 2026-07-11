@@ -37,6 +37,7 @@
 ├── start_clash.sh
 ├── stop_clash.sh
 ├── watchdog_clash.sh
+├── time_sync.sh
 ├── logs/
 ├── run/
 ├── ruleset/
@@ -273,6 +274,9 @@ Linux/macOS/Git Bash：
 4. 更新启动脚本，启动前自动确认 `/dev/net/tun`，并打开 `net.ipv4.ip_forward=1`。
 5. 重启 Mihomo，等待 `7890`、`9090` 就绪。
 
+启动脚本还会在真正拉起 Mihomo 前调用 `/data/clash/time_sync.sh` 做一次轻量 NTP 校时。
+这是给 VLESS REALITY / Vision 节点准备的：REALITY 对系统时钟非常敏感，如果路由器 UTC 时间偏差过大，会出现 `REALITY authentication failed`，表现为节点配置看起来正确但所有代理测速失败。
+
 TUN + 分流模板默认启用：
 
 | 功能 | 默认值 |
@@ -290,6 +294,43 @@ TUN + 分流模板默认启用：
 ```text
 启用 TUN 后不会因为没有节点而断网；
 后续你把自己的代理节点/订阅加进 config.yaml，PROXY 规则才会真正走节点。
+```
+
+### VLESS REALITY 节点注意事项
+
+已在这台设备上实测过 VLESS Reality + `xtls-rprx-vision`：
+
+- 普通 mixed-port 模式可用；
+- TUN + fake-ip DNS 模式可用；
+- LAN、WAN、DNS、controller 在 1-2 分钟临时测试窗口内均正常；
+- 测试结束会自动回滚到默认普通代理模式。
+
+关键点是 **系统时钟必须正确**。本机曾出现：
+
+```text
+路由器 UTC 比真实 UTC 快 8 小时
+Mihomo 日志：REALITY authentication failed
+```
+
+校准 UTC 后，同一个节点立即恢复：
+
+```text
+REALITY Authentication: true
+controller delay: 800ms - 1200ms 左右
+本机 curl 通过 192.168.8.1:7890 返回 204/200
+```
+
+所以仓库已经加入 `/data/clash/time_sync.sh`，默认每次 Mihomo 冷启动前尝试 NTP 校时。可选开关：
+
+```sh
+# 临时禁用启动前校时
+MIHOMO_SYNC_TIME=0 /data/clash/start_clash.sh
+
+# 或持久禁用
+touch /data/clash/no_time_sync
+
+# 自定义 NTP peer 和单 peer 等待秒数
+MIHOMO_NTP_PEERS="ntp.aliyun.com ntp.tencent.com" MIHOMO_NTP_TIMEOUT=8 /data/clash/start_clash.sh
 ```
 
 ## 一键关闭 TUN，恢复普通代理
@@ -464,6 +505,7 @@ python .\scripts\deploy.py restart
 | `router/start_clash.sh` | 路由器端启动脚本 |
 | `router/stop_clash.sh` | 路由器端停止/清理脚本 |
 | `router/watchdog_clash.sh` | 路由器端保活脚本 |
+| `router/time_sync.sh` | 路由器端启动前 NTP 校时脚本，避免 REALITY 因系统时间错误认证失败 |
 | `router/operator_policy_dns.sh` | 路由器端关闭/恢复/查看运营商策略路由和 DNS |
 | `router/operator_policy_dns_watchdog.sh` | 路由器端运营商策略/DNS 持久保持脚本 |
 | `router/service_persist.sh` | 被 `/data/ssh_persist.sh` 调用的统一服务入口 |
