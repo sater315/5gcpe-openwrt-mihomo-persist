@@ -289,6 +289,35 @@ TUN + 分流模板默认启用：
 | DNS 模式 | `fake-ip` |
 | 规则来源 | `/data/clash/ruleset/*.yaml` |
 
+### LAN 手机 WiFi 兼容修复
+
+这台 5GCPE 的厂商转发链和 Mihomo TUN 组合，对 LAN 手机直接透明进 TUN 不稳定，常见表现是：
+
+```text
+手机连上 WiFi，但系统显示无互联网
+Mihomo 日志里出现 192.168.8.x -> 114.114.114.114 / 180.76.76.76 的 ICMP 探测
+随后出现 receive ICMP echo reply timeout
+```
+
+为保证手机 WiFi 先稳定有网，`start_clash.sh` 在 TUN 开启时默认加入两条高优先级策略：
+
+```text
+8997: iif br0 to 198.18.0.0/16 lookup 2022
+8998: iif br0 lookup main
+```
+
+含义：
+
+- LAN 客户端访问 Mihomo fake-ip `198.18.0.0/16` 时仍交给 TUN 处理；
+- LAN 客户端其它普通公网流量直接走系统 main 表，避免手机联网检测被 TUN ICMP/fake-ip 组合误伤；
+- 路由器本机的 Mihomo / REALITY / mixed-port 仍保持运行。
+
+如果后续要强制让所有 LAN 手机都透明代理，可临时关闭该保护：
+
+```sh
+LAN_TUN_BYPASS=0 /data/clash/start_clash.sh
+```
+
 当前模板默认没有内置真实代理节点，`PROXY` 组默认只有 `DIRECT`：
 
 ```text

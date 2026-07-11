@@ -13,6 +13,10 @@ LOG="$LOG_DIR/clash.log"
 PID="$RUN_DIR/mihomo.pid"
 ENABLED="$CLASH_DIR/enabled"
 LAN_CIDR=${LAN_CIDR:-192.168.8.0/24}
+LAN_IF=${LAN_IF:-br0}
+LAN_TUN_BYPASS=${LAN_TUN_BYPASS:-1}
+LAN_TUN_BYPASS_PREF=${LAN_TUN_BYPASS_PREF:-8998}
+LAN_TUN_FAKEIP_PREF=${LAN_TUN_FAKEIP_PREF:-8997}
 PROXY_PORT=${PROXY_PORT:-7890}
 CTRL_PORT=${CTRL_PORT:-9090}
 DNS_PORT=${DNS_PORT:-7874}
@@ -58,6 +62,8 @@ dns_enabled() { section_enabled dns; }
 cleanup_tun_state() {
     command -v ip >/dev/null 2>&1 || return 0
     for i in 1 2 3 4 5; do
+        ip rule del pref "$LAN_TUN_FAKEIP_PREF" 2>/dev/null || true
+        ip rule del pref "$LAN_TUN_BYPASS_PREF" 2>/dev/null || true
         ip rule del pref 9000 2>/dev/null || true
         ip rule del pref 9001 2>/dev/null || true
         ip rule del pref 9002 2>/dev/null || true
@@ -90,6 +96,20 @@ ensure_tun() {
         chmod 600 /dev/net/tun 2>/dev/null || true
     fi
     sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || true
+}
+
+ensure_lan_tun_bypass() {
+    [ "$LAN_TUN_BYPASS" = "1" ] || return 0
+    command -v ip >/dev/null 2>&1 || return 0
+    if ip link show "$LAN_IF" >/dev/null 2>&1; then
+        ip rule del pref "$LAN_TUN_FAKEIP_PREF" 2>/dev/null || true
+        ip rule add pref "$LAN_TUN_FAKEIP_PREF" iif "$LAN_IF" to 198.18.0.0/16 lookup 2022 2>/dev/null || true
+        ip rule del pref "$LAN_TUN_BYPASS_PREF" 2>/dev/null || true
+        ip rule add pref "$LAN_TUN_BYPASS_PREF" iif "$LAN_IF" lookup main 2>/dev/null || true
+        say "LAN TUN bypass enabled: pref=$LAN_TUN_FAKEIP_PREF iif=$LAN_IF to 198.18.0.0/16 lookup 2022; pref=$LAN_TUN_BYPASS_PREF iif=$LAN_IF lookup main"
+    else
+        say "LAN TUN bypass skipped: interface missing $LAN_IF"
+    fi
 }
 
 is_stopping() {
@@ -169,6 +189,7 @@ ensure_firewall
 if tun_enabled; then
     cleanup_tun_state
     ensure_tun
+    ensure_lan_tun_bypass
 fi
 ulimit -n 65535 2>/dev/null || true
 say "starting mihomo: $BIN -d $CLASH_DIR -f $CONF"
