@@ -53,7 +53,7 @@
 ### 从 GitHub 克隆后一键部署
 
 ```powershell
-git clone <YOUR_GITHUB_REPO_URL>
+git clone https://github.com/sater315/5gcpe-openwrt-mihomo-persist.git
 cd 5gcpe-openwrt-mihomo-persist
 .\deploy.ps1
 ```
@@ -237,3 +237,4 @@ python .\scripts\deploy.py install --release v1.19.28
 ```powershell
 python .\scripts\deploy.py install --mihomo-file C:\path\to\mihomo-linux-arm64-v1.19.28
 ```
+
