@@ -1,0 +1,37 @@
+# Conservative default config for 5GCPE OpenWrt vendor firmware.
+# This starts Mihomo as a normal LAN proxy only.
+# DNS hijack, TUN and transparent proxy are intentionally disabled.
+
+mixed-port: 7890
+allow-lan: true
+bind-address: '*'
+mode: rule
+log-level: info
+ipv6: true
+
+external-controller: 0.0.0.0:9090
+secret: ''
+external-ui: ui
+
+profile:
+  store-selected: true
+  store-fake-ip: true
+
+find-process-mode: off
+
+dns:
+  enable: false
+
+tun:
+  enable: false
+
+proxies: []
+
+proxy-groups:
+  - name: PROXY
+    type: select
+    proxies:
+      - DIRECT
+
+rules:
+  - MATCH,DIRECT
