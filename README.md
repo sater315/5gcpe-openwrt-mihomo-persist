@@ -197,6 +197,35 @@ netstat -lntp | grep -E '7890|9090|7874'
 tail -n 80 /data/clash/logs/clash.log
 ```
 
+## 已测试的启动/停止策略
+
+当前 `router/start_clash.sh`、`router/stop_clash.sh`、`router/watchdog_clash.sh` 已按 5GCPE 环境做成幂等方案：
+
+- `start_clash.sh` 可重复执行，不会重复启动多个 Mihomo。
+- `service_persist.sh` 可重复执行，不会重复启动多个 watchdog。
+- `stop_clash.sh` 可重复执行，即使已经停止也会返回成功。
+- 停止时先停 watchdog，再停 Mihomo，避免 watchdog 在停止过程中把进程拉起来。
+- 启动/停止使用 `/tmp/codex_mihomo_start.lock`、`/tmp/codex_mihomo_stop.lock` 和 `/tmp/codex_mihomo_stopping` 避免竞态。
+- 启动前会校验配置；配置错误时拒绝启动，保留日志。
+- 普通模式下只放行 `7890/9090`，不会再放行或监听 `7874`。
+- 如果配置里 `tun.enable: false`，启动前会主动清理旧的 Mihomo TUN 残留。
+- 停止时会强制清理：
+  - `mihomo` TUN 网卡；
+  - `ip rule pref 9000/9001/9002/9010`；
+  - `ip route table 2022`；
+  - `CODEX_MIHOMO_INPUT` iptables 链。
+
+已在设备上完成测试：
+
+```text
+普通模式 service_persist 连续启动 3 次：通过，只有 1 个 Mihomo + 1 个 watchdog
+普通模式 start_clash 连续启动 3 次：通过，不重复进程
+普通模式 stop_clash 连续停止 3 次：通过，无进程、无端口、无 TUN 残留
+普通模式 stop/start 循环 2 轮：通过
+临时 TUN 配置启动后停止：通过，TUN 网卡和 9000 系列策略路由全部清理
+停止后恢复普通模式：通过，7890/9090 正常，7874 不监听，WAN ping 正常
+```
+
 ## 使用代理
 
 局域网客户端设置：
