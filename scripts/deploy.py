@@ -26,10 +26,13 @@ except ImportError:
 ROOT = Path(__file__).resolve().parents[1]
 ROUTER = ROOT / "router"
 CACHE = ROOT / ".cache"
+RESOURCES = ROOT / "resources"
+BUNDLED_MANIFEST = RESOURCES / "manifest.json"
 REMOTE_DIR = "/data/clash"
 DEFAULT_HOST = os.environ.get("SSH_IP", "192.168.8.1")
 DEFAULT_USER = os.environ.get("SSH_USER", "root")
 DEFAULT_PASSWORD = os.environ.get("SSH_PASSWORD", "")
+DEFAULT_RELEASE = "v1.19.28"
 GITHUB_API = "https://api.github.com/repos/MetaCubeX/mihomo/releases"
 
 
@@ -184,12 +187,41 @@ def download_mihomo(release_arg: str) -> Tuple[Path, str, str]:
     return bin_path, tag, name
 
 
+def bundled_mihomo() -> Tuple[Path, str, str]:
+    if not BUNDLED_MANIFEST.exists():
+        die(f"bundled manifest not found: {BUNDLED_MANIFEST}")
+    manifest = json.loads(BUNDLED_MANIFEST.read_text(encoding="utf-8"))
+    asset = manifest["asset"]
+    tag = manifest.get("version", DEFAULT_RELEASE)
+    want_sha = str(manifest.get("sha256", "")).lower()
+    gz_path = RESOURCES / asset
+    if not gz_path.exists():
+        die(f"bundled mihomo asset not found: {gz_path}")
+    got_sha = sha256_file(gz_path).lower()
+    if want_sha and got_sha != want_sha:
+        die(f"bundled asset sha256 mismatch: got {got_sha}, want {want_sha}")
+    CACHE.mkdir(exist_ok=True)
+    bin_path = CACHE / asset[:-3]
+    if not bin_path.exists() or bin_path.stat().st_mtime < gz_path.stat().st_mtime:
+        info(f"decompressing bundled {gz_path.name}")
+        tmp = bin_path.with_suffix(bin_path.suffix + ".tmp")
+        with gzip.open(gz_path, "rb") as src, tmp.open("wb") as dst:
+            shutil.copyfileobj(src, dst)
+        tmp.replace(bin_path)
+    os.chmod(bin_path, 0o755)
+    info(f"using bundled mihomo {tag}: {asset}")
+    info(f"bundled sha256 ok: {got_sha}")
+    return bin_path, tag, asset
+
+
 def get_mihomo_file(args) -> Tuple[Path, str, str]:
     if args.mihomo_file:
         p = Path(args.mihomo_file).expanduser().resolve()
         if not p.exists():
             die(f"mihomo file not found: {p}")
         return p, "local", p.name
+    if not args.download:
+        return bundled_mihomo()
     return download_mihomo(args.release)
 
 
@@ -316,6 +348,34 @@ def upload_router_files(client, mihomo_bin: Path, config_path: Path, overwrite_c
     remote_write_text(client, f"{REMOTE_DIR}/install_manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", 0o644)
 
 
+def wait_ready(client, timeout: int = 90) -> None:
+    info(f"waiting for mihomo/controller ready (timeout={timeout}s)")
+    deadline = time.time() + timeout
+    last = ""
+    while time.time() < deadline:
+        rc, out, _ = run(
+            client,
+            r'''pid=$(pidof mihomo 2>/dev/null | awk '{print $1}')
+ports=$(netstat -lntp 2>/dev/null | grep -E '(:7890|:9090)' || true)
+ver=$(wget -qO- http://127.0.0.1:9090/version 2>/dev/null || true)
+echo "pid=$pid"
+echo "$ports"
+echo "version=$ver"
+test -n "$pid" && echo "$ports" | grep -q ':7890' && echo "$ports" | grep -q ':9090' && echo "$ver" | grep -q '"version"' ''',
+            check=False,
+            timeout=15,
+            show=False,
+        )
+        last = out.strip()
+        if rc == 0:
+            print(last)
+            info("mihomo is ready")
+            return
+        time.sleep(3)
+    print(last)
+    die("mihomo did not become ready before timeout")
+
+
 def install(args) -> None:
     client = connect(args)
     try:
@@ -333,7 +393,10 @@ def install(args) -> None:
         if not args.no_autostart:
             patch_ssh_persist(client)
         run(client, "/bin/sh /data/service_persist.sh", timeout=30)
-        time.sleep(2)
+        if not args.no_wait:
+            wait_ready(client, timeout=args.wait_timeout)
+        else:
+            time.sleep(2)
         status(args, existing_client=client)
         info("install completed")
     finally:
@@ -358,7 +421,10 @@ def restart(args) -> None:
     try:
         run(client, f"[ -x {REMOTE_DIR}/stop_clash.sh ] && /bin/sh {REMOTE_DIR}/stop_clash.sh || true", check=False, timeout=30)
         run(client, "/bin/sh /data/service_persist.sh", timeout=30)
-        time.sleep(2)
+        if not args.no_wait:
+            wait_ready(client, timeout=args.wait_timeout)
+        else:
+            time.sleep(2)
         status(args, existing_client=client)
     finally:
         client.close()
@@ -402,11 +468,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--user", default=DEFAULT_USER)
     p.add_argument("--password", default=DEFAULT_PASSWORD)
     p.add_argument("--timeout", type=int, default=15)
-    p.add_argument("--release", default="latest", help="mihomo release tag, e.g. v1.19.28, or latest")
+    p.add_argument("--release", default=DEFAULT_RELEASE, help="mihomo release tag used only with --download")
+    p.add_argument("--download", action="store_true", help="download mihomo from MetaCubeX instead of using bundled resources")
     p.add_argument("--mihomo-file", default="", help="local decompressed mihomo binary to upload")
     p.add_argument("--config", default="", help="local config.yaml to upload on first install")
     p.add_argument("--overwrite-config", action="store_true", help="overwrite remote /data/clash/config.yaml")
     p.add_argument("--no-autostart", action="store_true", help="do not patch /data/ssh_persist.sh")
+    p.add_argument("--no-wait", action="store_true", help="do not wait for ports/controller after install/restart")
+    p.add_argument("--wait-timeout", type=int, default=90, help="seconds to wait for mihomo readiness")
     p.add_argument("--purge-backups", action="store_true", help="remove ssh_persist backup files during uninstall")
     return p
 

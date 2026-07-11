@@ -5,7 +5,7 @@ ACTION=${1:-install}
 if [ $# -gt 0 ]; then shift; fi
 SSH_IP=${SSH_IP:-192.168.8.1}
 SSH_USER=${SSH_USER:-root}
-RELEASE=${MIHOMO_RELEASE:-${RELEASE:-latest}}
+RELEASE=${MIHOMO_RELEASE:-${RELEASE:-v1.19.28}}
 if [ "$ACTION" = "install" ]; then
   if [ "${SSH_PASSWORD:-}" != "" ]; then
     exec python3 "$DIR/scripts/deploy.py" install --host "$SSH_IP" --user "$SSH_USER" --password "$SSH_PASSWORD" --release "$RELEASE" "$@"

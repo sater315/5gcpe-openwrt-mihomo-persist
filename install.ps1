@@ -2,7 +2,7 @@ param(
     [string]$SSH_IP = $(if ($env:SSH_IP) { $env:SSH_IP } else { "192.168.8.1" }),
     [string]$SSH_USER = $(if ($env:SSH_USER) { $env:SSH_USER } else { "root" }),
     [string]$SSH_PASSWORD = $env:SSH_PASSWORD,
-    [string]$Release = $(if ($env:MIHOMO_RELEASE) { $env:MIHOMO_RELEASE } else { "latest" }),
+    [string]$Release = $(if ($env:MIHOMO_RELEASE) { $env:MIHOMO_RELEASE } else { "v1.19.28" }),
     [string]$Config = "",
     [switch]$OverwriteConfig,
     [switch]$NoAutostart

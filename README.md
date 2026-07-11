@@ -8,6 +8,7 @@
 - 通过现有 `/data/ssh_persist.sh` 所在的 collectd 持久启动链自启动。
 - watchdog 保活，进程退出后自动拉起。
 - 提供一键安装、一键卸载，卸载会移除本仓库写入的启动钩子、进程、iptables 链和 `/data/clash`。
+- Mihomo 资源固定在本仓库 `resources/`，默认不再拉取上游 latest，避免版本漂移。
 
 > 本方案不是完整 LuCI 版 OpenClash；它是更适合这台设备的 Mihomo core 持久化部署。默认只开启普通 HTTP/SOCKS mixed 代理端口和 external-controller，不启用 TUN/透明代理/DNS 劫持。
 
@@ -49,6 +50,43 @@
 | Mihomo external-controller API | `http://192.168.8.1:9090` |
 
 ## 一键安装
+
+## 最傻瓜式用法
+
+Windows PowerShell：
+
+```powershell
+git clone https://github.com/sater315/5gcpe-openwrt-mihomo-persist.git
+cd 5gcpe-openwrt-mihomo-persist
+.\一键部署.ps1
+```
+
+或者用英文入口：
+
+```powershell
+.\oneclick.ps1
+```
+
+执行后只需要输入一次路由器 SSH 密码，然后等待脚本自动完成：
+
+```text
+检查 Python
+检查/安装 paramiko
+校验仓库内固定 Mihomo v1.19.28 资源
+上传到 /data/clash
+接入 /data/ssh_persist.sh 开机链
+启动 Mihomo
+等待 7890/9090/controller 就绪
+输出部署成功
+```
+
+Linux/macOS/Git Bash：
+
+```sh
+git clone https://github.com/sater315/5gcpe-openwrt-mihomo-persist.git
+cd 5gcpe-openwrt-mihomo-persist
+./oneclick.sh
+```
 
 ### 从 GitHub 克隆后一键部署
 
@@ -98,13 +136,14 @@ Linux/macOS/Git Bash：
 
 1. 用 SSH 登录路由器。
 2. 检查 `/data`、架构、`/data/ssh_persist.sh`。
-3. 下载 GitHub 最新稳定版 `mihomo-linux-arm64-*.gz` 到本机 `.cache/`。
+3. 使用本仓库固定资源 `resources/mihomo-linux-arm64-v1.19.28.gz`，并校验 SHA256。
 4. 解压并上传为 `/data/clash/mihomo`。
 5. 上传启动/停止/watchdog/service 脚本。
 6. 首次安装时上传 `config.example.yaml` 为 `/data/clash/config.yaml`。
 7. 在 `/data/ssh_persist.sh` 的 `exit 0` 前插入带标记的自启动钩子。
 8. 立即启动 Mihomo 和 watchdog。
-9. 输出状态、端口和最近日志。
+9. 自动等待 `7890`、`9090` 和 `http://127.0.0.1:9090/version` 就绪。
+10. 输出状态、端口和最近日志。
 
 ## 一键卸载并恢复
 
@@ -208,28 +247,48 @@ python .\scripts\deploy.py restart
 | `uninstall.ps1` | Windows 一键卸载入口 |
 | `status.ps1` | Windows 状态查看入口 |
 | `deploy.ps1` | Windows 统一一键部署入口，支持 `install/uninstall/status/restart` |
+| `oneclick.ps1` | Windows 傻瓜式一键部署入口：自动检查依赖、部署并等待完成 |
+| `一键部署.ps1` | 中文傻瓜式入口，调用 `oneclick.ps1` |
 | `install.sh` | POSIX shell 一键安装入口 |
 | `uninstall.sh` | POSIX shell 一键卸载入口 |
 | `deploy.sh` | POSIX shell 统一一键部署入口，支持 `install/uninstall/status/restart` |
+| `oneclick.sh` | POSIX shell 傻瓜式一键部署入口 |
 | `scripts/deploy.py` | 核心部署器，使用 Paramiko SSH；已适配本机 Dropbear 无 SFTP subsystem 的情况，文件通过 SSH stdin 上传 |
+| `resources/mihomo-linux-arm64-v1.19.28.gz` | 固定内置 Mihomo arm64 资源 |
+| `resources/manifest.json` | 固定资源版本和 SHA256 校验信息 |
 | `router/start_clash.sh` | 路由器端启动脚本 |
 | `router/stop_clash.sh` | 路由器端停止/清理脚本 |
 | `router/watchdog_clash.sh` | 路由器端保活脚本 |
 | `router/service_persist.sh` | 被 `/data/ssh_persist.sh` 调用的统一服务入口 |
 | `config.example.yaml` | 默认 Mihomo 配置模板 |
 
-## GitHub release 选择
+## 固定资源版本
 
-脚本默认通过 GitHub API 获取 MetaCubeX/mihomo 最新稳定 release，然后选择：
+本仓库默认固定使用内置资源：
 
 ```text
-mihomo-linux-arm64-<version>.gz
+resources/mihomo-linux-arm64-v1.19.28.gz
 ```
 
-也可以固定版本：
+校验信息在：
+
+```text
+resources/manifest.json
+```
+
+当前固定版本：
+
+```text
+Mihomo v1.19.28
+SHA256: 2474450cd1c41dfa53036a54a4e85579f493d3af524d86c3d4b8e2b240b56cd2
+```
+
+默认部署不访问 MetaCubeX GitHub release，不会因为上游 latest 变化导致行为变化。
+
+如果将来确实要从上游下载指定版本，可以显式加 `--download`：
 
 ```powershell
-python .\scripts\deploy.py install --release v1.19.28
+python .\scripts\deploy.py install --download --release v1.19.28
 ```
 
 或者使用本地已下载的 core：

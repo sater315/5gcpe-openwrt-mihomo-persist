@@ -1,0 +1,8 @@
+{
+  "version": "v1.19.28",
+  "asset": "mihomo-linux-arm64-v1.19.28.gz",
+  "target_arch": "aarch64",
+  "sha256": "2474450cd1c41dfa53036a54a4e85579f493d3af524d86c3d4b8e2b240b56cd2",
+  "source_project": "MetaCubeX/mihomo",
+  "note": "Bundled fixed Mihomo arm64 release for one-click offline-style deployment from this repo."
+}
