@@ -25,6 +25,7 @@ except ImportError:
 
 ROOT = Path(__file__).resolve().parents[1]
 ROUTER = ROOT / "router"
+RULESET = ROOT / "ruleset"
 CACHE = ROOT / ".cache"
 RESOURCES = ROOT / "resources"
 BUNDLED_MANIFEST = RESOURCES / "manifest.json"
@@ -321,8 +322,24 @@ echo "ssh_persist hook removed"
     run(client, "/bin/sh /tmp/codex_unpatch_ssh_persist.sh && rm -f /tmp/codex_unpatch_ssh_persist.sh", timeout=30)
 
 
+
+def upload_ruleset_files(client) -> None:
+    if not RULESET.exists():
+        return
+    files = [p for p in RULESET.rglob("*") if p.is_file() and p.name.lower() != "readme.md"]
+    if not files:
+        return
+    info(f"uploading rule-provider files: {len(files)}")
+    run(client, f"mkdir -p {REMOTE_DIR}/ruleset", timeout=30)
+    for path in files:
+        rel = path.relative_to(RULESET).as_posix()
+        remote = f"{REMOTE_DIR}/ruleset/{rel}"
+        parent = remote.rsplit("/", 1)[0]
+        run(client, f"mkdir -p {sh_quote(parent)}", timeout=30, show=False)
+        remote_upload_file(client, path, remote, 0o644)
+
 def upload_router_files(client, mihomo_bin: Path, config_path: Path, overwrite_config: bool = False) -> None:
-    run(client, f"mkdir -p {REMOTE_DIR}/logs {REMOTE_DIR}/run {REMOTE_DIR}/ui", timeout=30)
+    run(client, f"mkdir -p {REMOTE_DIR}/logs {REMOTE_DIR}/run {REMOTE_DIR}/ui {REMOTE_DIR}/ruleset", timeout=30)
     info("uploading router scripts")
     for name in ["start_clash.sh", "stop_clash.sh", "watchdog_clash.sh"]:
         remote_upload_file(client, ROUTER / name, f"{REMOTE_DIR}/{name}", 0o755)
@@ -331,11 +348,15 @@ def upload_router_files(client, mihomo_bin: Path, config_path: Path, overwrite_c
     info(f"uploading mihomo binary: {mihomo_bin.name}")
     remote_upload_file(client, mihomo_bin, f"{REMOTE_DIR}/mihomo", 0o755)
 
+    upload_ruleset_files(client)
+
     rc, _, _ = run(client, f"test -f {REMOTE_DIR}/config.yaml", check=False, show=False)
     exists = (rc == 0)
     if exists and not overwrite_config:
         info("remote config.yaml exists; preserving it (use --overwrite-config to replace)")
     else:
+        if exists and overwrite_config:
+            run(client, f"cp {REMOTE_DIR}/config.yaml {REMOTE_DIR}/config.yaml.bak.$(date +%Y%m%d-%H%M%S 2>/dev/null || echo now)", check=False, timeout=30)
         info(f"uploading config: {config_path}")
         remote_upload_file(client, config_path, f"{REMOTE_DIR}/config.yaml", 0o644)
     remote_write_text(client, f"{REMOTE_DIR}/enabled", "enabled\n", 0o644)
@@ -356,7 +377,7 @@ def wait_ready(client, timeout: int = 90) -> None:
         rc, out, _ = run(
             client,
             r'''pid=$(pidof mihomo 2>/dev/null | awk '{print $1}')
-ports=$(netstat -lntp 2>/dev/null | grep -E '(:7890|:9090)' || true)
+ports=$(netstat -lntp 2>/dev/null | grep -E '(:7890|:9090|:7874)' || true)
 ver=$(wget -qO- http://127.0.0.1:9090/version 2>/dev/null || true)
 echo "pid=$pid"
 echo "$ports"
@@ -443,10 +464,18 @@ echo '--- hook ---'
 if [ -f /data/ssh_persist.sh ]; then grep -n 'CODEX_MIHOMO_PERSIST' /data/ssh_persist.sh 2>/dev/null || echo 'no hook'; else echo 'no /data/ssh_persist.sh'; fi
 echo '--- version ---'
 /data/clash/mihomo -v 2>/dev/null || true
+echo '--- tun/dns capability ---'
+ls -l /dev/net /dev/net/tun 2>/dev/null || true
+[ -c /dev/net/tun ] && echo 'TUN_DEVICE=YES' || echo 'TUN_DEVICE=NO'
+ip link show mihomo 2>/dev/null || true
+ip rule show 2>/dev/null | sed -n '1,20p' || true
+ip route show 2>/dev/null | sed -n '1,25p' || true
+echo '--- config mode ---'
+awk 'BEGIN{s=0} /^(tun|dns|rule-providers|rules):/{s=1;print;next} /^[^ #].*:/{if(s){s=0}} s{print}' /data/clash/config.yaml 2>/dev/null | sed -n '1,140p' || true
 echo '--- process ---'
 ps 2>/dev/null | grep -E '[m]ihomo|[w]atchdog_clash' || true
 echo '--- ports ---'
-netstat -lntp 2>/dev/null | grep -E '(:7890|:9090)' || true
+netstat -lntp 2>/dev/null | grep -E '(:7890|:9090|:7874)' || true
 echo '--- iptables ---'
 iptables -S CODEX_MIHOMO_INPUT 2>/dev/null || true
 echo '--- recent clash log ---'

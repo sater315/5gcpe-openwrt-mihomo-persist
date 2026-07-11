@@ -1,0 +1,26 @@
+payload:
+  # CN and common local-service direct examples
+  - DOMAIN-SUFFIX,cn
+  - DOMAIN-SUFFIX,qq.com
+  - DOMAIN-SUFFIX,wechat.com
+  - DOMAIN-SUFFIX,weixin.qq.com
+  - DOMAIN-SUFFIX,tencent.com
+  - DOMAIN-SUFFIX,gtimg.com
+  - DOMAIN-SUFFIX,alicdn.com
+  - DOMAIN-SUFFIX,aliyun.com
+  - DOMAIN-SUFFIX,taobao.com
+  - DOMAIN-SUFFIX,tmall.com
+  - DOMAIN-SUFFIX,jd.com
+  - DOMAIN-SUFFIX,baidu.com
+  - DOMAIN-SUFFIX,bilibili.com
+  - DOMAIN-SUFFIX,douyin.com
+  - DOMAIN-SUFFIX,bytedance.com
+  - DOMAIN-SUFFIX,163.com
+  - DOMAIN-SUFFIX,126.net
+  - DOMAIN-SUFFIX,mi.com
+  - DOMAIN-SUFFIX,xiaomi.com
+  - DOMAIN-SUFFIX,msftconnecttest.com
+  - DOMAIN-SUFFIX,msftncsi.com
+  - DOMAIN-SUFFIX,ntp.org.cn
+  - DOMAIN,ntp.aliyun.com
+  - DOMAIN,pool.ntp.org

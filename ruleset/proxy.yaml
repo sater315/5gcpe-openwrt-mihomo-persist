@@ -1,0 +1,17 @@
+payload:
+  # Common proxy-site examples; extend as needed
+  - DOMAIN-SUFFIX,google.com
+  - DOMAIN-SUFFIX,gstatic.com
+  - DOMAIN-SUFFIX,googleapis.com
+  - DOMAIN-SUFFIX,youtube.com
+  - DOMAIN-SUFFIX,ytimg.com
+  - DOMAIN-SUFFIX,github.com
+  - DOMAIN-SUFFIX,githubusercontent.com
+  - DOMAIN-SUFFIX,githubassets.com
+  - DOMAIN-SUFFIX,telegram.org
+  - DOMAIN-SUFFIX,t.me
+  - DOMAIN-SUFFIX,facebook.com
+  - DOMAIN-SUFFIX,instagram.com
+  - DOMAIN-SUFFIX,twitter.com
+  - DOMAIN-SUFFIX,x.com
+  - DOMAIN-SUFFIX,netflix.com

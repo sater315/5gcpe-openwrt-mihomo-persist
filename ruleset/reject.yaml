@@ -1,0 +1,7 @@
+payload:
+  # Basic ad/tracker reject examples; extend as needed
+  - DOMAIN-SUFFIX,doubleclick.net
+  - DOMAIN-SUFFIX,googlesyndication.com
+  - DOMAIN-SUFFIX,googleadservices.com
+  - DOMAIN-SUFFIX,adsystem.com
+  - DOMAIN-SUFFIX,adservice.google.com

@@ -24,16 +24,24 @@ fi
 if [ -f "$PID" ]; then
     p=$(cat "$PID" 2>/dev/null)
     [ -n "$p" ] && kill "$p" 2>/dev/null || true
-    sleep 1
-    [ -n "$p" ] && kill -9 "$p" 2>/dev/null || true
+    i=0
+    while [ -n "$p" ] && kill -0 "$p" 2>/dev/null && [ "$i" -lt 6 ]; do
+        sleep 1
+        i=$((i + 1))
+    done
+    [ -n "$p" ] && kill -0 "$p" 2>/dev/null && kill -9 "$p" 2>/dev/null || true
     rm -f "$PID" 2>/dev/null || true
     say "mihomo stopped pid=$p"
 fi
 
 for p in $(pidof mihomo 2>/dev/null); do
     [ -n "$p" ] && kill "$p" 2>/dev/null || true
-    sleep 1
-    [ -n "$p" ] && kill -9 "$p" 2>/dev/null || true
+    i=0
+    while [ -n "$p" ] && kill -0 "$p" 2>/dev/null && [ "$i" -lt 6 ]; do
+        sleep 1
+        i=$((i + 1))
+    done
+    [ -n "$p" ] && kill -0 "$p" 2>/dev/null && kill -9 "$p" 2>/dev/null || true
     say "extra mihomo killed pid=$p"
 done
 

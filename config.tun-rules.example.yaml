@@ -1,0 +1,163 @@
+# Mihomo TUN + rule-provider profile
+# For this 5GCPE: persistent /data deploy, TUN routing, fake-ip DNS, local rule-providers.
+# Note: this template contains no real proxy nodes by default; PROXY only contains DIRECT.
+# After adding your subscription/nodes, update proxies/proxy-providers and the PROXY group.
+
+mixed-port: 7890
+allow-lan: true
+bind-address: '*'
+mode: rule
+log-level: info
+ipv6: false
+
+external-controller: 0.0.0.0:9090
+secret: ''
+external-ui: ui
+
+profile:
+  store-selected: true
+  store-fake-ip: true
+
+find-process-mode: off
+
+# DNS is required for TUN + domain rule matching.
+# fake-ip lets Mihomo match domain rules after traffic enters TUN as IP packets.
+dns:
+  enable: true
+  listen: 0.0.0.0:7874
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - '*.lan'
+    - '*.local'
+    - 'localhost'
+    - '+.msftconnecttest.com'
+    - '+.msftncsi.com'
+    - 'time.*.com'
+    - 'time.*.gov'
+    - 'time.*.edu.cn'
+    - 'ntp.*.com'
+    - 'ntp.aliyun.com'
+    - 'pool.ntp.org'
+    - '+.routerlogin.net'
+    - '+.home.arpa'
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  nameserver:
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+  fallback:
+    - https://1.1.1.1/dns-query
+    - https://8.8.8.8/dns-query
+  fallback-filter:
+    geoip: true
+    geoip-code: CN
+    ipcidr:
+      - 240.0.0.0/4
+
+# This device has /dev/net/tun.
+# auto-route sends router/forwarded traffic into Mihomo TUN; rules decide DIRECT/PROXY.
+tun:
+  enable: true
+  stack: mixed
+  device: mihomo
+  auto-route: true
+  auto-detect-interface: true
+  strict-route: false
+  dns-hijack:
+    - any:53
+  mtu: 9000
+
+sniffer:
+  enable: true
+  sniff:
+    HTTP:
+      ports:
+        - 80
+        - 8080-8880
+      override-destination: true
+    TLS:
+      ports:
+        - 443
+    QUIC:
+      ports:
+        - 443
+  skip-domain:
+    - '+.lan'
+    - '+.local'
+    - '+.home.arpa'
+
+# No real proxy nodes are bundled by default.
+# Add your nodes to proxies, or add proxy-providers subscriptions later.
+proxies: []
+
+proxy-groups:
+  - name: PROXY
+    type: select
+    proxies:
+      - DIRECT
+
+  - name: AI
+    type: select
+    proxies:
+      - PROXY
+      - DIRECT
+
+rule-providers:
+  private:
+    type: file
+    behavior: classical
+    format: yaml
+    path: ./ruleset/private.yaml
+
+  reject:
+    type: file
+    behavior: classical
+    format: yaml
+    path: ./ruleset/reject.yaml
+
+  direct:
+    type: file
+    behavior: classical
+    format: yaml
+    path: ./ruleset/direct.yaml
+
+  ai:
+    type: file
+    behavior: classical
+    format: yaml
+    path: ./ruleset/ai.yaml
+
+  proxy:
+    type: file
+    behavior: classical
+    format: yaml
+    path: ./ruleset/proxy.yaml
+
+rules:
+  - RULE-SET,private,DIRECT
+  - RULE-SET,reject,REJECT
+  - RULE-SET,direct,DIRECT
+  - RULE-SET,ai,AI
+  - RULE-SET,proxy,PROXY
+
+  # Keep private/LAN traffic direct to protect admin UI, DHCP/DNS and LAN devices.
+  - DOMAIN-SUFFIX,lan,DIRECT
+  - DOMAIN-SUFFIX,local,DIRECT
+  - IP-CIDR,0.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,100.64.0.0/10,DIRECT,no-resolve
+  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,169.254.0.0/16,DIRECT,no-resolve
+  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+  - IP-CIDR,224.0.0.0/4,DIRECT,no-resolve
+  - IP-CIDR,240.0.0.0/4,DIRECT,no-resolve
+
+  # Simple CN/domain direct fallback; put more rules in ruleset/direct.yaml.
+  - DOMAIN-SUFFIX,cn,DIRECT
+
+  # Fallback to PROXY. Current PROXY only has DIRECT, so no-node mode will not break network.
+  - MATCH,PROXY

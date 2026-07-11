@@ -39,6 +39,7 @@
 ├── watchdog_clash.sh
 ├── logs/
 ├── run/
+├── ruleset/
 └── ui/
 ```
 
@@ -192,7 +193,7 @@ python .\scripts\deploy.py status
 ```sh
 /data/clash/mihomo -v
 ps | grep mihomo
-netstat -lntp | grep -E '7890|9090'
+netstat -lntp | grep -E '7890|9090|7874'
 tail -n 80 /data/clash/logs/clash.log
 ```
 
@@ -203,6 +204,91 @@ tail -n 80 /data/clash/logs/clash.log
 ```text
 HTTP proxy:  192.168.8.1:7890
 SOCKS proxy: 192.168.8.1:7890
+```
+
+## 一键启用 TUN + 分流规则
+
+这台设备已经检测到：
+
+```text
+/dev/net/tun 存在
+ip / iptables / sysctl 可用
+Mihomo v1.19.28 带 with_gvisor
+```
+
+所以可以直接启用 Mihomo core 的 TUN 和本地 rule-providers 分流模板，不需要完整 OpenClash LuCI。
+
+Windows PowerShell：
+
+```powershell
+.\一键启用TUN分流.ps1
+```
+
+英文入口：
+
+```powershell
+.\enable-tun-rules.ps1
+```
+
+Linux/macOS/Git Bash：
+
+```sh
+./enable-tun-rules.sh
+```
+
+启用脚本会：
+
+1. 备份路由器当前 `/data/clash/config.yaml` 为 `/data/clash/config.yaml.bak.YYYYmmdd-HHMMSS`。
+2. 上传 `config.tun-rules.example.yaml` 为新的 `/data/clash/config.yaml`。
+3. 上传本地规则文件到 `/data/clash/ruleset/`。
+4. 更新启动脚本，启动前自动确认 `/dev/net/tun`，并打开 `net.ipv4.ip_forward=1`。
+5. 重启 Mihomo，等待 `7890`、`9090` 就绪。
+
+TUN + 分流模板默认启用：
+
+| 功能 | 默认值 |
+|---|---|
+| mixed proxy | `0.0.0.0:7890` |
+| external-controller | `0.0.0.0:9090` |
+| DNS | `0.0.0.0:7874` |
+| TUN | `tun.enable: true` |
+| TUN stack | `mixed` |
+| DNS 模式 | `fake-ip` |
+| 规则来源 | `/data/clash/ruleset/*.yaml` |
+
+当前模板默认没有内置真实代理节点，`PROXY` 组默认只有 `DIRECT`：
+
+```text
+启用 TUN 后不会因为没有节点而断网；
+后续你把自己的代理节点/订阅加进 config.yaml，PROXY 规则才会真正走节点。
+```
+
+## 一键关闭 TUN，恢复普通代理
+
+如果启用 TUN 后想恢复原来的普通 mixed-port 代理模式：
+
+```powershell
+.\一键关闭TUN分流.ps1
+```
+
+英文入口：
+
+```powershell
+.\disable-tun-rules.ps1
+```
+
+Linux/macOS/Git Bash：
+
+```sh
+./disable-tun-rules.sh
+```
+
+它会备份当前配置，然后把 `/data/clash/config.yaml` 恢复为 `config.example.yaml`：
+
+```text
+dns.enable: false
+tun.enable: false
+rules: MATCH,DIRECT
 ```
 
 默认配置是 DIRECT 占位配置，主要用于验证进程、端口和自启动稳定性。要真正走节点，把你的 Mihomo/Clash YAML 写入：
@@ -237,7 +323,7 @@ python .\scripts\deploy.py restart
 
 也就是第一阶段只做普通代理，不劫持 DNS，不改路由，不启用 TUN。这样对 5G 模块、厂商 Web、TR069/管理进程、LAN DHCP/DNS 的影响最小。
 
-如果之后要启用 TUN/透明代理，建议先确认 `config.yaml` 在普通 mixed 端口模式下能稳定运行，再逐步添加 TUN/DNS/iptables 规则。
+仓库已经附带 `config.tun-rules.example.yaml`，可以通过 `一键启用TUN分流.ps1` 切换到 TUN + DNS + rule-providers 模式。
 
 ## 文件说明
 
@@ -249,10 +335,14 @@ python .\scripts\deploy.py restart
 | `deploy.ps1` | Windows 统一一键部署入口，支持 `install/uninstall/status/restart` |
 | `oneclick.ps1` | Windows 傻瓜式一键部署入口：自动检查依赖、部署并等待完成 |
 | `一键部署.ps1` | 中文傻瓜式入口，调用 `oneclick.ps1` |
+| `enable-tun-rules.ps1` / `一键启用TUN分流.ps1` | 一键切换到 TUN + fake-ip DNS + 本地分流规则模板 |
+| `disable-tun-rules.ps1` / `一键关闭TUN分流.ps1` | 一键关闭 TUN/DNS 接管，恢复普通 mixed-port 模式 |
 | `install.sh` | POSIX shell 一键安装入口 |
 | `uninstall.sh` | POSIX shell 一键卸载入口 |
 | `deploy.sh` | POSIX shell 统一一键部署入口，支持 `install/uninstall/status/restart` |
 | `oneclick.sh` | POSIX shell 傻瓜式一键部署入口 |
+| `enable-tun-rules.sh` | POSIX shell 启用 TUN + 分流规则入口 |
+| `disable-tun-rules.sh` | POSIX shell 关闭 TUN、恢复普通代理入口 |
 | `scripts/deploy.py` | 核心部署器，使用 Paramiko SSH；已适配本机 Dropbear 无 SFTP subsystem 的情况，文件通过 SSH stdin 上传 |
 | `resources/mihomo-linux-arm64-v1.19.28.gz` | 固定内置 Mihomo arm64 资源 |
 | `resources/manifest.json` | 固定资源版本和 SHA256 校验信息 |
@@ -260,7 +350,9 @@ python .\scripts\deploy.py restart
 | `router/stop_clash.sh` | 路由器端停止/清理脚本 |
 | `router/watchdog_clash.sh` | 路由器端保活脚本 |
 | `router/service_persist.sh` | 被 `/data/ssh_persist.sh` 调用的统一服务入口 |
-| `config.example.yaml` | 默认 Mihomo 配置模板 |
+| `config.example.yaml` | 默认普通代理配置模板，TUN/DNS 关闭 |
+| `config.tun-rules.example.yaml` | TUN + fake-ip DNS + 本地 rule-providers 分流模板 |
+| `ruleset/*.yaml` | 本地分流规则，部署到 `/data/clash/ruleset/` |
 
 ## 固定资源版本
 

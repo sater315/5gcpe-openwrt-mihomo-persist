@@ -15,6 +15,7 @@ ENABLED="$CLASH_DIR/enabled"
 LAN_CIDR=${LAN_CIDR:-192.168.8.0/24}
 PROXY_PORT=${PROXY_PORT:-7890}
 CTRL_PORT=${CTRL_PORT:-9090}
+DNS_PORT=${DNS_PORT:-7874}
 
 mkdir -p "$LOG_DIR" "$RUN_DIR" "$CLASH_DIR/ui" 2>/dev/null
 
@@ -26,6 +27,21 @@ ensure_firewall() {
     iptables -C INPUT -j CODEX_MIHOMO_INPUT 2>/dev/null || iptables -I INPUT 1 -j CODEX_MIHOMO_INPUT 2>/dev/null || true
     iptables -C CODEX_MIHOMO_INPUT -s "$LAN_CIDR" -p tcp --dport "$PROXY_PORT" -j ACCEPT 2>/dev/null || iptables -A CODEX_MIHOMO_INPUT -s "$LAN_CIDR" -p tcp --dport "$PROXY_PORT" -j ACCEPT 2>/dev/null || true
     iptables -C CODEX_MIHOMO_INPUT -s "$LAN_CIDR" -p tcp --dport "$CTRL_PORT" -j ACCEPT 2>/dev/null || iptables -A CODEX_MIHOMO_INPUT -s "$LAN_CIDR" -p tcp --dport "$CTRL_PORT" -j ACCEPT 2>/dev/null || true
+    iptables -C CODEX_MIHOMO_INPUT -s "$LAN_CIDR" -p tcp --dport "$DNS_PORT" -j ACCEPT 2>/dev/null || iptables -A CODEX_MIHOMO_INPUT -s "$LAN_CIDR" -p tcp --dport "$DNS_PORT" -j ACCEPT 2>/dev/null || true
+    iptables -C CODEX_MIHOMO_INPUT -s "$LAN_CIDR" -p udp --dport "$DNS_PORT" -j ACCEPT 2>/dev/null || iptables -A CODEX_MIHOMO_INPUT -s "$LAN_CIDR" -p udp --dport "$DNS_PORT" -j ACCEPT 2>/dev/null || true
+}
+
+ensure_tun() {
+    # TUN is required only when config.yaml enables tun.enable=true.
+    # Creating /dev/net/tun is harmless in normal mixed-port mode and fixes devices
+    # that support TUN in-kernel but do not create the character device at boot.
+    modprobe tun 2>/dev/null || true
+    if [ ! -c /dev/net/tun ]; then
+        mkdir -p /dev/net 2>/dev/null || true
+        mknod /dev/net/tun c 10 200 2>/dev/null || true
+        chmod 600 /dev/net/tun 2>/dev/null || true
+    fi
+    sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || true
 }
 
 if [ ! -f "$ENABLED" ]; then
@@ -63,6 +79,7 @@ for p in $(pidof mihomo 2>/dev/null); do
 done
 
 ensure_firewall
+ensure_tun
 ulimit -n 65535 2>/dev/null || true
 say "starting mihomo: $BIN -d $CLASH_DIR -f $CONF"
 nohup "$BIN" -d "$CLASH_DIR" -f "$CONF" >> "$LOG" 2>&1 &
