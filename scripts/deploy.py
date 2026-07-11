@@ -369,6 +369,20 @@ def upload_router_files(client, mihomo_bin: Path, config_path: Path, overwrite_c
     remote_write_text(client, f"{REMOTE_DIR}/install_manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", 0o644)
 
 
+def cleanup_tun_state(client) -> None:
+    cmd = r'''for i in 1 2 3 4 5; do
+  ip rule del pref 9000 2>/dev/null || true
+  ip rule del pref 9001 2>/dev/null || true
+  ip rule del pref 9002 2>/dev/null || true
+  ip rule del pref 9010 2>/dev/null || true
+done
+ip route flush table 2022 2>/dev/null || true
+ip link set mihomo down 2>/dev/null || true
+ip link del mihomo 2>/dev/null || true
+'''
+    run(client, cmd, check=False, timeout=30, show=False)
+
+
 def wait_ready(client, timeout: int = 90) -> None:
     info(f"waiting for mihomo/controller ready (timeout={timeout}s)")
     deadline = time.time() + timeout
@@ -413,6 +427,7 @@ def install(args) -> None:
         upload_router_files(client, mihomo_bin, config_path, overwrite_config=args.overwrite_config)
         if not args.no_autostart:
             patch_ssh_persist(client)
+        cleanup_tun_state(client)
         run(client, "/bin/sh /data/service_persist.sh", timeout=30)
         if not args.no_wait:
             wait_ready(client, timeout=args.wait_timeout)
@@ -428,6 +443,7 @@ def uninstall(args) -> None:
     client = connect(args)
     try:
         run(client, f"[ -x {REMOTE_DIR}/stop_clash.sh ] && /bin/sh {REMOTE_DIR}/stop_clash.sh || true", check=False, timeout=30)
+        cleanup_tun_state(client)
         unpatch_ssh_persist(client, purge_backups=args.purge_backups)
         run(client, f"rm -rf {REMOTE_DIR}", timeout=60)
         run(client, "rm -f /tmp/codex_mihomo* /tmp/codex_service_persist.log 2>/dev/null || true", check=False)
@@ -441,6 +457,7 @@ def restart(args) -> None:
     client = connect(args)
     try:
         run(client, f"[ -x {REMOTE_DIR}/stop_clash.sh ] && /bin/sh {REMOTE_DIR}/stop_clash.sh || true", check=False, timeout=30)
+        cleanup_tun_state(client)
         run(client, "/bin/sh /data/service_persist.sh", timeout=30)
         if not args.no_wait:
             wait_ready(client, timeout=args.wait_timeout)
