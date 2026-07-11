@@ -207,3 +207,117 @@ WAN ping OK
 普通模式可作为稳定默认运行状态。
 TUN 配置仍不建议长期启用，但即使临时启动过，也可以被 stop_clash.sh 清理恢复。
 ```
+
+## 运营商策略路由和 DNS 关闭/恢复验证
+
+验证时间：2026-07-11 19:32-19:39，设备本地时间。
+
+### 原始状态
+
+运营商/厂商策略路由：
+
+```text
+0:      from all lookup local
+60:     from all lookup 60
+80:     from all lookup 80
+100:    from 10.114.55.59 lookup 100
+100:    from all fwmark 0x4000000/0xfc000000 lookup 100
+100:    from all oif ccmni3 lookup 100
+32766:  from all lookup main
+32767:  from all lookup default
+```
+
+运营商 DNS：
+
+```text
+/tmp/resolv.conf
+/var/resolv.conf
+/tmp/resolv.conf.d/resolv.conf.auto
+
+nameserver 211.138.240.110
+nameserver 211.138.245.188
+```
+
+### 关闭动作
+
+执行：
+
+```powershell
+.\deploy.ps1 -Action operator-disable
+```
+
+关闭后状态：
+
+```text
+--- marker ---
+disabled 2026-07-11 19:39:03
+
+--- ip rule ---
+0:      from all lookup local
+32766:  from all lookup main
+32767:  from all lookup default
+
+--- dns files ---
+nameserver 223.5.5.5
+nameserver 119.29.29.29
+nameserver 1.1.1.1
+```
+
+网络验证：
+
+```text
+PING 223.5.5.5: 1 packets transmitted, 1 packets received, 0% packet loss
+nslookup baidu.com 使用 Server: 223.5.5.5
+```
+
+持久保持进程：
+
+```text
+/data/clash/operator_policy_dns_watchdog.sh
+/tmp/codex_operator_policy_dns_watchdog.pid
+```
+
+### 恢复动作
+
+执行：
+
+```powershell
+.\deploy.ps1 -Action operator-restore
+```
+
+恢复后状态：
+
+```text
+60:     from all lookup 60
+80:     from all lookup 80
+100:    from 10.114.55.59 lookup 100
+100:    from all fwmark 0x4000000/0xfc000000 lookup 100
+100:    from all oif ccmni3 lookup 100
+
+table 100:
+default via 10.114.55.60 dev ccmni3
+10.114.55.56/29 dev ccmni3 scope link
+192.168.8.0/24 dev br0 scope link
+
+DNS:
+nameserver 211.138.240.110
+nameserver 211.138.245.188
+```
+
+### 再次关闭
+
+恢复后再次执行 `operator-disable`，最终状态回到：
+
+```text
+ip rule 只剩 local/main/default
+DNS 为 223.5.5.5 / 119.29.29.29 / 1.1.1.1
+WAN ping 正常
+operator_policy_dns_watchdog 正常运行
+```
+
+结论：
+
+```text
+运营商策略路由和 DNS 可以在运行态关闭，并通过 /data 持久标记保持；
+也可以一键恢复到运营商 pref 60/80/100 策略和 211.138.* DNS。
+```

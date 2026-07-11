@@ -320,6 +320,86 @@ tun.enable: false
 rules: MATCH,DIRECT
 ```
 
+## 关闭运营商策略路由和运营商 DNS
+
+这台 5GCPE 默认会使用运营商/厂商网络进程生成的策略路由和 DNS：
+
+```text
+ip rule pref 60 lookup 60
+ip rule pref 80 lookup 80
+ip rule pref 100 from <ccmni-ip> lookup 100
+ip rule pref 100 fwmark 0x4000000/0xfc000000 lookup 100
+ip rule pref 100 oif ccmniX lookup 100
+
+nameserver 211.138.240.110
+nameserver 211.138.245.188
+```
+
+仓库提供一键开关，可以把运行态切换为只走 main/default 路由，并把 DNS 改成公共 DNS：
+
+```text
+223.5.5.5
+119.29.29.29
+1.1.1.1
+```
+
+关闭运营商策略路由和 DNS：
+
+```powershell
+.\一键关闭运营商策略DNS.ps1
+```
+
+英文入口：
+
+```powershell
+.\disable-operator-policy-dns.ps1
+```
+
+查看状态：
+
+```powershell
+.\查看运营商策略DNS状态.ps1
+```
+
+恢复运营商策略路由和 DNS：
+
+```powershell
+.\一键恢复运营商策略DNS.ps1
+```
+
+Linux/macOS/Git Bash：
+
+```sh
+./disable-operator-policy-dns.sh
+./status-operator-policy-dns.sh
+./restore-operator-policy-dns.sh
+```
+
+关闭后会写入持久标记：
+
+```text
+/data/clash/operator_policy_dns/disabled
+```
+
+并启动保持进程：
+
+```text
+/data/clash/operator_policy_dns_watchdog.sh
+```
+
+该 watchdog 每 30 秒检查一次，防止 5G 重拨或厂商进程把 `pref 60/80/100` 和运营商 DNS 写回来。
+
+已测试：
+
+```text
+关闭后 ip rule 只剩 local/main/default
+DNS 文件变为 223.5.5.5 / 119.29.29.29 / 1.1.1.1
+WAN ping 223.5.5.5 正常
+dnsmasq 使用公共 DNS 解析
+恢复后可回到 pref 60/80/100 + 211.138.* DNS
+再关闭后可重新进入公共 DNS + main/default 模式
+```
+
 默认配置是 DIRECT 占位配置，主要用于验证进程、端口和自启动稳定性。要真正走节点，把你的 Mihomo/Clash YAML 写入：
 
 ```text
@@ -366,18 +446,26 @@ python .\scripts\deploy.py restart
 | `一键部署.ps1` | 中文傻瓜式入口，调用 `oneclick.ps1` |
 | `enable-tun-rules.ps1` / `一键启用TUN分流.ps1` | 一键切换到 TUN + fake-ip DNS + 本地分流规则模板 |
 | `disable-tun-rules.ps1` / `一键关闭TUN分流.ps1` | 一键关闭 TUN/DNS 接管，恢复普通 mixed-port 模式 |
+| `disable-operator-policy-dns.ps1` / `一键关闭运营商策略DNS.ps1` | 一键删除运行态运营商策略路由，并把 DNS 改为公共 DNS |
+| `restore-operator-policy-dns.ps1` / `一键恢复运营商策略DNS.ps1` | 一键恢复运营商策略路由和运营商 DNS |
+| `status-operator-policy-dns.ps1` / `查看运营商策略DNS状态.ps1` | 查看运营商策略/DNS 开关状态 |
 | `install.sh` | POSIX shell 一键安装入口 |
 | `uninstall.sh` | POSIX shell 一键卸载入口 |
 | `deploy.sh` | POSIX shell 统一一键部署入口，支持 `install/uninstall/status/restart` |
 | `oneclick.sh` | POSIX shell 傻瓜式一键部署入口 |
 | `enable-tun-rules.sh` | POSIX shell 启用 TUN + 分流规则入口 |
 | `disable-tun-rules.sh` | POSIX shell 关闭 TUN、恢复普通代理入口 |
+| `disable-operator-policy-dns.sh` | POSIX shell 关闭运营商策略/DNS 入口 |
+| `restore-operator-policy-dns.sh` | POSIX shell 恢复运营商策略/DNS 入口 |
+| `status-operator-policy-dns.sh` | POSIX shell 查看运营商策略/DNS 状态入口 |
 | `scripts/deploy.py` | 核心部署器，使用 Paramiko SSH；已适配本机 Dropbear 无 SFTP subsystem 的情况，文件通过 SSH stdin 上传 |
 | `resources/mihomo-linux-arm64-v1.19.28.gz` | 固定内置 Mihomo arm64 资源 |
 | `resources/manifest.json` | 固定资源版本和 SHA256 校验信息 |
 | `router/start_clash.sh` | 路由器端启动脚本 |
 | `router/stop_clash.sh` | 路由器端停止/清理脚本 |
 | `router/watchdog_clash.sh` | 路由器端保活脚本 |
+| `router/operator_policy_dns.sh` | 路由器端关闭/恢复/查看运营商策略路由和 DNS |
+| `router/operator_policy_dns_watchdog.sh` | 路由器端运营商策略/DNS 持久保持脚本 |
 | `router/service_persist.sh` | 被 `/data/ssh_persist.sh` 调用的统一服务入口 |
 | `config.example.yaml` | 默认普通代理配置模板，TUN/DNS 关闭 |
 | `config.tun-rules.example.yaml` | TUN + fake-ip DNS + 本地 rule-providers 分流模板 |

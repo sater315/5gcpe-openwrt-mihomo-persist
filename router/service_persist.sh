@@ -10,6 +10,19 @@ WDPID=/tmp/codex_mihomo_watchdog.pid
 
 {
   echo "=== codex service_persist start $(date) ==="
+  if [ -x "$CLASH_DIR/operator_policy_dns.sh" ] && [ -f "$CLASH_DIR/operator_policy_dns/disabled" ]; then
+    /bin/sh "$CLASH_DIR/operator_policy_dns.sh" apply
+    OPWDPID=/tmp/codex_operator_policy_dns_watchdog.pid
+    opoldpid=''
+    [ -f "$OPWDPID" ] && opoldpid=$(cat "$OPWDPID" 2>/dev/null)
+    if [ -z "$opoldpid" ] || ! kill -0 "$opoldpid" 2>/dev/null; then
+      nohup /bin/sh "$CLASH_DIR/operator_policy_dns_watchdog.sh" >/tmp/codex_operator_policy_dns_watchdog.out 2>&1 &
+      echo $! > "$OPWDPID"
+      echo "operator policy/dns watchdog started $(cat "$OPWDPID" 2>/dev/null)"
+    else
+      echo "operator policy/dns watchdog already running $opoldpid"
+    fi
+  fi
   if [ -x "$CLASH_DIR/start_clash.sh" ]; then
     /bin/sh "$CLASH_DIR/start_clash.sh"
   else

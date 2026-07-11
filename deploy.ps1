@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("install", "uninstall", "status", "restart")]
+    [ValidateSet("install", "uninstall", "status", "restart", "operator-disable", "operator-restore", "operator-status")]
     [string]$Action = "install",
     [string]$SSH_IP = $(if ($env:SSH_IP) { $env:SSH_IP } else { "192.168.8.1" }),
     [string]$SSH_USER = $(if ($env:SSH_USER) { $env:SSH_USER } else { "root" }),
@@ -33,3 +33,4 @@ if ($Action -eq "install") {
 }
 if ($Action -eq "uninstall" -and $PurgeBackups) { $ArgsList += "--purge-backups" }
 & $Py.Source @ArgsList
+

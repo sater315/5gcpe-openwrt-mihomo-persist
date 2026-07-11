@@ -341,7 +341,7 @@ def upload_ruleset_files(client) -> None:
 def upload_router_files(client, mihomo_bin: Path, config_path: Path, overwrite_config: bool = False) -> None:
     run(client, f"mkdir -p {REMOTE_DIR}/logs {REMOTE_DIR}/run {REMOTE_DIR}/ui {REMOTE_DIR}/ruleset", timeout=30)
     info("uploading router scripts")
-    for name in ["start_clash.sh", "stop_clash.sh", "watchdog_clash.sh"]:
+    for name in ["start_clash.sh", "stop_clash.sh", "watchdog_clash.sh", "operator_policy_dns.sh", "operator_policy_dns_watchdog.sh"]:
         remote_upload_file(client, ROUTER / name, f"{REMOTE_DIR}/{name}", 0o755)
     remote_upload_file(client, ROUTER / "service_persist.sh", "/data/service_persist.sh", 0o755)
 
@@ -382,6 +382,31 @@ ip link del mihomo 2>/dev/null || true
 '''
     run(client, cmd, check=False, timeout=30, show=False)
 
+
+
+def upload_operator_policy_dns_scripts(client) -> None:
+    run(client, f"mkdir -p {REMOTE_DIR}/logs {REMOTE_DIR}/operator_policy_dns", timeout=30)
+    for name in ["operator_policy_dns.sh", "operator_policy_dns_watchdog.sh"]:
+        remote_upload_file(client, ROUTER / name, f"{REMOTE_DIR}/{name}", 0o755)
+    remote_upload_file(client, ROUTER / "service_persist.sh", "/data/service_persist.sh", 0o755)
+
+
+def operator_policy_dns(args, action: str) -> None:
+    client = connect(args)
+    try:
+        upload_operator_policy_dns_scripts(client)
+        if action == "disable":
+            run(client, f"/bin/sh {REMOTE_DIR}/operator_policy_dns.sh disable", timeout=60)
+            run(client, "/bin/sh /data/service_persist.sh", timeout=30)
+        elif action == "restore":
+            run(client, "[ -f /tmp/codex_operator_policy_dns_watchdog.pid ] && kill $(cat /tmp/codex_operator_policy_dns_watchdog.pid 2>/dev/null) 2>/dev/null || true; rm -f /tmp/codex_operator_policy_dns_watchdog.pid /tmp/codex_operator_policy_dns_watchdog.out", check=False, timeout=30)
+            run(client, f"/bin/sh {REMOTE_DIR}/operator_policy_dns.sh restore", timeout=60)
+        elif action == "status":
+            run(client, f"/bin/sh {REMOTE_DIR}/operator_policy_dns.sh status", timeout=60)
+        else:
+            die(f"unknown operator policy dns action: {action}")
+    finally:
+        client.close()
 
 def wait_ready(client, timeout: int = 90) -> None:
     info(f"waiting for mihomo/controller ready (timeout={timeout}s)")
@@ -508,7 +533,7 @@ tail -n 20 /data/clash/logs/watchdog.log 2>/dev/null || true
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Deploy persistent Mihomo core to 5GCPE OpenWrt /data")
-    p.add_argument("action", choices=["install", "uninstall", "status", "restart"])
+    p.add_argument("action", choices=["install", "uninstall", "status", "restart", "operator-disable", "operator-restore", "operator-status"])
     p.add_argument("--host", default=DEFAULT_HOST)
     p.add_argument("--port", type=int, default=int(os.environ.get("SSH_PORT", "22")))
     p.add_argument("--user", default=DEFAULT_USER)
@@ -536,6 +561,12 @@ def main(argv=None) -> None:
         restart(args)
     elif args.action == "status":
         status(args)
+    elif args.action == "operator-disable":
+        operator_policy_dns(args, "disable")
+    elif args.action == "operator-restore":
+        operator_policy_dns(args, "restore")
+    elif args.action == "operator-status":
+        operator_policy_dns(args, "status")
     else:
         die("unknown action")
 
